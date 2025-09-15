@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 # ---------------------------
 # CONFIG
 # ---------------------------
-Entrez.email = "your-email@example.com"   # REQUIRED for PubMed
+Entrez.email = "nida.amir0083@gmail.com"   # REQUIRED for PubMed
 CURRENT_YEAR = datetime.now().year
 
 DISEASE_TERMS = [
