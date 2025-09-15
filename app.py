@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from retrieval_module import run_retrieval_and_scoring, aggregate_drug_evidence, plot_prisma
+import os
 
 # -------------------------
 # PAGE CONFIG
@@ -13,10 +14,12 @@ st.set_page_config(
 # -------------------------
 # CUSTOM BACKGROUND & STYLE
 # -------------------------
+
+background_path = os.path.join(os.getcwd(), "assets/dna_background.jpg")
 page_bg_img = """
 <style>
 [data-testid="stAppViewContainer"] {
-    background-image: url("https://www.science.org/do/10.1126/science.adg6929/full/_20230317_on_ai_drugrepurposing.jpg");
+    background-image: url("file://{background_path}");
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
