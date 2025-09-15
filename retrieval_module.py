@@ -1,7 +1,7 @@
-# retrieval_module.py
 """
-Step 1: Systematic retrieval + evidence scoring
-PubMed + arXiv → deduplication → PRISMA counts → composite evidence scoring
+retrieval_module.py
+Step 1 + Step 2: Systematic retrieval + evidence scoring + drug aggregation
+PubMed + arXiv → deduplication → PRISMA → composite scoring → drug-level summary
 """
 
 import re, numpy as np
@@ -12,11 +12,12 @@ from Bio import Entrez
 import arxiv
 from transformers import AutoTokenizer, AutoModel
 import torch
+import matplotlib.pyplot as plt
 
 # ---------------------------
 # CONFIG
 # ---------------------------
-Entrez.email = "your-email@example.com"   # REQUIRED by NCBI
+Entrez.email = "your-email@example.com"   # REQUIRED for PubMed
 CURRENT_YEAR = datetime.now().year
 
 DISEASE_TERMS = [
@@ -27,8 +28,7 @@ DISEASE_TERMS = [
 ]
 
 DEFAULT_DRUGS = [
-    "Pazopanib", "Sorafenib", "Cabozantinib", "Everolimus",
-    "mTOR inhibitor", "VEGFR inhibitor"
+    "Pazopanib", "Sorafenib", "Cabozantinib", "Everolimus"
 ]
 
 DEFAULT_METHODS = [
@@ -36,13 +36,12 @@ DEFAULT_METHODS = [
     "knowledge graph", "hypothesis generation", "generative AI"
 ]
 
-# Load BioBERT (once)
+# Load BioBERT (for embeddings)
 tokenizer = AutoTokenizer.from_pretrained("dmis-lab/biobert-base-cased-v1.1")
 model = AutoModel.from_pretrained("dmis-lab/biobert-base-cased-v1.1")
 
-
 # ---------------------------
-# HELPER FUNCTIONS
+# HELPERS
 # ---------------------------
 
 def normalize_title(title: str) -> str:
@@ -52,7 +51,6 @@ def normalize_title(title: str) -> str:
     t = re.sub(r'[^\w\s]', '', t)
     return t
 
-
 def embed_text(text):
     if not text:
         return np.zeros(768)
@@ -60,7 +58,6 @@ def embed_text(text):
     with torch.no_grad():
         outputs = model(**inputs)
     return outputs.last_hidden_state.mean(dim=1).squeeze().numpy()
-
 
 def fetch_pubmed(query, max_results=200):
     handle = Entrez.esearch(db="pubmed", term=query, retmax=max_results)
@@ -95,7 +92,6 @@ def fetch_pubmed(query, max_results=200):
             continue
     return results
 
-
 def fetch_arxiv(query, max_results=100):
     search = arxiv.Search(
         query=query,
@@ -114,7 +110,6 @@ def fetch_arxiv(query, max_results=100):
             "query": query
         })
     return results
-
 
 def compute_features(row, disease_keywords, drug_keywords, query_embedding):
     text = (row["title"] or "") + " " + (row["abstract"] or "")
@@ -148,7 +143,6 @@ def compute_features(row, disease_keywords, drug_keywords, query_embedding):
         "embedding_similarity": sim
     })
 
-
 # ---------------------------
 # MAIN PIPELINE
 # ---------------------------
@@ -158,6 +152,7 @@ def run_retrieval_and_scoring(disease="Anaplastic Thyroid Carcinoma",
                               methods=DEFAULT_METHODS,
                               max_pubmed=200,
                               max_arxiv=100):
+
     # Build queries
     disease_block = " OR ".join([f'"{d}"' for d in [disease] + DISEASE_TERMS])
     drug_block = " OR ".join([f'"{d}"' for d in drugs])
@@ -221,49 +216,73 @@ def run_retrieval_and_scoring(disease="Anaplastic Thyroid Carcinoma",
     df = df.sort_values("composite_score", ascending=False).reset_index(drop=True)
     return df, prisma_counts
 
-
 # ---------------------------
-# DRUG-LEVEL EVIDENCE
+# DRUG-LEVEL AGGREGATION
 # ---------------------------
 
 def aggregate_drug_evidence(df, drugs=None):
-    """
-    Aggregate article-level evidence into drug-level evidence table.
-    """
-
     if drugs is None:
-        drugs = ["Pazopanib", "Sorafenib", "Cabozantinib", "Everolimus"]
+        drugs = DEFAULT_DRUGS
 
     drug_rows = []
     for drug in drugs:
         drug_lower = drug.lower()
-
-        # Subset articles mentioning this drug
         subset = df[df["title"].str.lower().str.contains(drug_lower) |
                     df["abstract"].str.lower().str.contains(drug_lower)]
 
         if len(subset) == 0:
             continue
 
-        # Aggregate metrics
-        n_articles = len(subset)
-        avg_score = subset["composite_score"].mean()
-        max_score = subset["composite_score"].max()
-        recency = subset["recency"].mean()
-        avg_similarity = subset["embedding_norm"].mean()
-        disease_mentions = subset["disease_mention"].sum()
-
         drug_rows.append({
             "Drug": drug,
-            "Articles": n_articles,
-            "Avg_Composite": round(avg_score, 3),
-            "Max_Composite": round(max_score, 3),
-            "Recency_Avg": round(recency, 3),
-            "Avg_Similarity": round(avg_similarity, 3),
-            "Disease_Mentions": int(disease_mentions)
+            "Articles": len(subset),
+            "Avg_Composite": round(subset["composite_score"].mean(), 3),
+            "Max_Composite": round(subset["composite_score"].max(), 3),
+            "Recency_Avg": round(subset["recency"].mean(), 3),
+            "Avg_Similarity": round(subset["embedding_norm"].mean(), 3),
+            "Disease_Mentions": int(subset["disease_mention"].sum())
         })
 
-    # Sort by evidence score
     df_drug = pd.DataFrame(drug_rows).sort_values("Avg_Composite", ascending=False).reset_index(drop=True)
     return df_drug
 
+# ---------------------------
+# PRISMA PLOT
+# ---------------------------
+
+def plot_prisma(prisma_counts):
+    fig, ax = plt.subplots(figsize=(6,6))
+    ax.axis("off")
+
+    steps = [
+        f"PubMed retrieved: {prisma_counts['PubMed retrieved']}",
+        f"arXiv retrieved: {prisma_counts['arXiv retrieved']}",
+        f"Total retrieved: {prisma_counts['Total retrieved']}",
+        f"Duplicates removed: {prisma_counts['Duplicates removed']}",
+        f"Final included: {prisma_counts['Final included']}"
+    ]
+
+    y = 1.0
+    for step in steps:
+        ax.text(0.5, y, step, ha="center", va="center",
+                bbox=dict(boxstyle="round,pad=0.5", fc="lightblue", ec="black", lw=1.5),
+                fontsize=12)
+        y -= 0.18
+
+    arrow_y = 0.91
+    for _ in range(len(steps)-1):
+        ax.annotate("↓", xy=(0.5, arrow_y), xycoords="axes fraction",
+                    ha="center", fontsize=14, weight="bold")
+        arrow_y -= 0.18
+
+    return fig
+
+    
+
+
+   
+   
+
+   
+
+    
