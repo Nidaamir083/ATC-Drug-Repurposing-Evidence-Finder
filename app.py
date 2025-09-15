@@ -15,26 +15,28 @@ st.set_page_config(
 # CUSTOM BACKGROUND & STYLE
 # -------------------------
 
-background_path = os.path.join(os.getcwd(), "assets/dna_background.jpg")
-page_bg_img = """
+# Path to background image
+background_path = os.path.join("assets", "dna_background.jpg")
+
+# Inject CSS with local file
+page_bg_img = f"""
 <style>
-[data-testid="stAppViewContainer"] {
-    background-image: url("file://{background_path}");
+[data-testid="stAppViewContainer"] {{
+    background-image: url("file://{os.path.abspath(background_path)}");
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
     background-attachment: fixed;
-}
-[data-testid="stHeader"] {
+}}
+[data-testid="stHeader"] {{
     background: rgba(0,0,0,0);
-}
-[data-testid="stSidebar"] {
+}}
+[data-testid="stSidebar"] {{
     background: rgba(255,255,255,0.9);
-}
+}}
 </style>
 """
 st.markdown(page_bg_img, unsafe_allow_html=True)
-
 # -------------------------
 # HEADER BANNER
 # -------------------------
