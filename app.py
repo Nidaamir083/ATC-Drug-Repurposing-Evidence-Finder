@@ -38,7 +38,7 @@ st.markdown(page_bg_img, unsafe_allow_html=True)
 st.image(
     "https://www.genengnews.com/wp-content/uploads/2023/04/GettyImages-Drug-Discovery.jpg",
     caption="AI for Drug Repurposing in Cancer",
-    use_column_width=True
+    use_container_width=True
 )
 
 st.title("🔬 ATC Drug Repurposing Evidence Finder")
