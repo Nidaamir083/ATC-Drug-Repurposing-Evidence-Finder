@@ -58,7 +58,7 @@ Inspired by: *Yan et al., 2024, npj Digital Medicine*.
 st.sidebar.image(
     "https://upload.wikimedia.org/wikipedia/commons/4/44/Thyroid_cancer_ribbon.svg",
     caption="Thyroid Cancer Awareness",
-    use_column_width=True
+    use_container_width=True
 )
 
 # -------------------------
